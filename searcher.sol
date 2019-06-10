@@ -1,36 +1,10 @@
-// We will be using Solidity version 0.5.3
-pragma solidity 0.5.3;
-// Importing OpenZeppelin's SafeMath Implementation
-import "https://github.com/OpenZeppelin/openzeppelin-solidity/contracts/math/SafeMath.sol";
 
-contract AuctionBox{
-
-    Auction[] public auctions;
-
-    function createAuction (
-        string memory _title,
-        uint _startPrice,
-        string memory _description
-        ) public{
-        // set the new instance
-        Auction newAuction = new Auction(msg.sender, _title, _description);
-        // push the auction address to auctions array
-        auctions.push(newAuction);
-    }
-
-    function returnAllAuctions() public view returns(Auction[] memory){
-        return auctions;
-    }
-}
+pragma solidity 0.4.18;
 
 contract Auction {
-
-    using SafeMath for uint256;
-
-    address payable private owner;  // 입찰제안자
+    address private owner;  // 입찰제안자
     string title; // 입찰 제목
     string description; // 입찰 설명
-
 
     enum State{Default, Running, Finalized}
     enum item_State{Brandnew, Preowned}
@@ -55,16 +29,13 @@ contract Auction {
         string i_model ;
     }
 
-    constructor(
-        address payable _owner,
-        string memory _title,
-        string memory _description
-
-        ) public {
-        // initialize auction
-        owner = _owner;
+    // auction 생성시 deploy 할 때 불필요하게 등록할 수 있으므로 최대 지불 가능 금액을 설정하여 등록 가능
+    function Auction(string  _title, string _description) public payable {
+        owner = msg.sender;
         title = _title;
         description = _description;
+        winningBidder = 0 ;
+        winningPrice = 0 ;
         auctionState = State.Running;
         starttime = now ; // 현재 시간으로 설정
         del_state = Delivery_State.Ready ;
@@ -87,7 +58,7 @@ contract Auction {
         // mapping 으로 지금 입찰자의 주소에 현재 입찰 금액을 넣어 줌
         bids[msg.sender] = price;
         // update the winning price
-        if ( winningPrice > price) {
+        if ( winningPrice > price || winningPrice == 0 ) {
           winningPrice = price;
           winningBidder = msg.sender;
         }
@@ -99,13 +70,14 @@ contract Auction {
     // final 하면 구매자가 searcher 에게 입금
     function finalizeAuction(address selected_searcher) public OwnerOnly payable {
         // 선택한 사람이 입찰자여야 함
-        if(bids[selected_searcher] > 0){
+        if(selected_searcher != address(0)){
             winningBidder = selected_searcher ;
             winningPrice = bids[selected_searcher];
         }
 
-
-        address(this).transfer(winningPrice); // searcher 에게 수수료 3% 추가하여 컨트랙에 전송
+        // searcher 에게 수수료 2% 추가하여 컨트랙에 전송
+        msg.sender.transfer(address(this).balance - (winningPrice * 102 / 100));
+        del_state = Delivery_State.Delevering ;
         auctionState = State.Finalized;
     }
 
@@ -117,18 +89,9 @@ contract Auction {
         }
     }
 
-
   // 진행 중인 입찰을 리턴
 
-    function returnContents() public view returns(
-        string memory,
-        string memory,
-        State
-        ) {
-        return (
-            title,
-            description,
-            auctionState
-        );
+    function returnContents() public view returns(string, string, State) {
+        return (title, description,auctionState);
     }
 }
