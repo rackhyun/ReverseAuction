@@ -1,4 +1,3 @@
-
 pragma solidity 0.4.18;
 
 contract Auction {
@@ -15,11 +14,9 @@ contract Auction {
     Delivery_State public del_state;
 
     uint public winningPrice; // 사용자가 만족한 금액이나 현재 가장 최저가 일 때 입찰 마감을 위함
-    address public winningBidder;
-    mapping(address => uint) public bids;
-
-
-    // 입찰하는 항목에 대한 정의
+    address public winningBidder; // 현재 최저 금액 서처
+    mapping(address => uint) public bids; // 서처 주소와 입찰 금액 저장
+// 입찰하는 항목에 대한 정의
     struct item {
         string i_id ;
         uint[5] i_category ;    // 카테고리는 최대 5개 까지 등록 가능, 0이면 빈칸
@@ -29,7 +26,7 @@ contract Auction {
         string i_model ;
     }
 
-    // auction 생성시 deploy 할 때 불필요하게 등록할 수 있으므로 최대 지불 가능 금액을 설정하여 등록 가능
+// auction 생성시 deploy 할 때 불필요하게 등록할 수 있으므로 최대 지불 가능 금액을 설정하여 등록(payable)
     function Auction(string  _title, string _description) public payable {
         owner = msg.sender;
         title = _title;
@@ -41,7 +38,8 @@ contract Auction {
         del_state = Delivery_State.Ready ;
     }
 
-    modifier notOwner(){
+    
+modifier notOwner(){
         require(msg.sender != owner);
         _;
     }
@@ -51,7 +49,7 @@ contract Auction {
         _;
     }
 
-    // searcher는 가격과 모델을 입찰 함
+// searcher는 가격과 모델을 입찰 함
     function placeBid(uint price) public notOwner returns(bool) {
         require(auctionState == State.Running); // 항목이 입찰 중이어야 함
 
@@ -64,10 +62,9 @@ contract Auction {
         }
         return true;
     }
-
-    //the owner can finalize the auction.
-    //입찰 종료는 기한이 지나거나 사용자가 미리 마감 가능
-    // final 하면 구매자가 searcher 에게 입금
+  //the owner can finalize the auction.
+  //입찰 종료는 기한이 지나거나 사용자가 미리 마감 가능
+    // final 하면 searcher 에게 입금할 금액을 제외하고 나머지 금액 withdraw
     function finalizeAuction(address selected_searcher) public OwnerOnly payable {
         // 선택한 사람이 입찰자여야 함
         if(selected_searcher != address(0)){
@@ -75,13 +72,14 @@ contract Auction {
             winningPrice = bids[selected_searcher];
         }
 
-        // searcher 에게 수수료 2% 추가하여 컨트랙에 전송
+        // searcher 에게 수수료 2% 추가하여 컨트랙트에 보관하고 잔여 금액은 구매자에게 돌려줌
+        // auction 상태를 변경 하고 배송 상태로 바꿈
         msg.sender.transfer(address(this).balance - (winningPrice * 102 / 100));
         del_state = Delivery_State.Delevering ;
         auctionState = State.Finalized;
     }
 
-    // 컨펌 시 금액 전송
+ // 배송이 되면 구매 컨펌 시 서처에게 금액 전송
     function confirm_buy() public OwnerOnly {
         if (del_state == Delivery_State.Delevering) {
           winningBidder.transfer(address(this).balance);
@@ -89,8 +87,7 @@ contract Auction {
         }
     }
 
-  // 진행 중인 입찰을 리턴
-
+    // 진행 중인 입찰을 리턴 (현황 보기)
     function returnContents() public view returns(string, string, State) {
         return (title, description,auctionState);
     }
